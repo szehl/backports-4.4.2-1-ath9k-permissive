@@ -14,6 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#define ENABLE_ALL_CHANNELS
+
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/kernel.h>
@@ -114,6 +116,23 @@ static const struct ieee80211_regdomain ath_world_regdom_67_68_6A_6C = {
 	}
 };
 
+#ifdef ENABLE_ALL_CHANNELS
+/* My permissive rules */
+#define ATH9K_2ALL		REG_RULE(2412-10, 2484+10, 40, 0, 20, 0)
+#define ATH9K_5ALL		REG_RULE(5040-10, 5850+10, 40, 0, 20, 0)
+#define ATH9K_ALL		ATH9K_2ALL, \
+				ATH9K_5ALL
+
+/* Permissive rules for all */
+static const struct ieee80211_regdomain ath_world_regdom_full_permissive = {
+        .n_reg_rules = 2,
+        .alpha2 =  "99",
+        .reg_rules = {
+                ATH9K_ALL,
+        }
+};
+#endif
+
 static bool dynamic_country_user_possible(struct ath_regulatory *reg)
 {
 	if (config_enabled(CPTCFG_ATH_REG_DYNAMIC_USER_CERT_TESTING))
@@ -197,9 +216,13 @@ static bool ath_reg_dyn_country_user_allow(struct ath_regulatory *reg)
 
 static inline bool is_wwr_sku(u16 regd)
 {
+#ifdef ENABLE_ALL_CHANNELS
+	return true;
+#else
 	return ((regd & COUNTRY_ERD_FLAG) != COUNTRY_ERD_FLAG) &&
 		(((regd & WORLD_SKU_MASK) == WORLD_SKU_PREFIX) ||
 		(regd == WORLD));
+#endif
 }
 
 static u16 ath_regd_get_eepromRD(struct ath_regulatory *reg)
@@ -223,6 +246,10 @@ static const struct
 ieee80211_regdomain *ath_world_regdomain(struct ath_regulatory *reg)
 {
 	switch (reg->regpair->reg_domain) {
+#ifdef ENABLE_ALL_CHANNELS
+	default:
+		return &ath_world_regdom_full_permissive;
+#else
 	case 0x60:
 	case 0x61:
 	case 0x62:
@@ -243,6 +270,7 @@ ieee80211_regdomain *ath_world_regdomain(struct ath_regulatory *reg)
 	default:
 		WARN_ON(1);
 		return ath_default_world_regdomain();
+#endif
 	}
 }
 
@@ -421,9 +449,13 @@ static void ath_reg_apply_radar_flags(struct wiphy *wiphy)
 		 * - If AP mode does not yet support radar detection/DFS
 		 *   do not allow AP mode
 		 */
+#ifdef ENABLE_ALL_CHANNELS
+		/*DISABLED*/
+#else
 		if (!(ch->flags & IEEE80211_CHAN_DISABLED))
 			ch->flags |= IEEE80211_CHAN_RADAR |
 				     IEEE80211_CHAN_NO_IR;
+#endif
 	}
 }
 
@@ -738,7 +770,12 @@ static int __ath_regd_init(struct ath_regulatory *reg)
 		reg->alpha2[0] = '0';
 		reg->alpha2[1] = '0';
 	}
-
+#ifdef ENABLE_ALL_CHANNELS
+	reg->alpha2[0] = '0';
+        reg->alpha2[1] = '0';
+        reg->regpair->reg_domain = 0x60; 
+     	printk(KERN_DEBUG "ath: ATH9K full permissive research edition enabled!\n");
+#endif       
 	printk(KERN_DEBUG "ath: Country alpha2 being used: %c%c\n",
 		reg->alpha2[0], reg->alpha2[1]);
 	printk(KERN_DEBUG "ath: Regpair used: 0x%0x\n",
